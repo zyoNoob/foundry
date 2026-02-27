@@ -5,15 +5,18 @@
 ARG BASE_IMAGE=ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
 FROM ${BASE_IMAGE}
 
-ENV PORT=8080
-ENV PORT_HEALTH=8081
+# Install RunPod SDK
+RUN apt-get update && apt-get install -y python3-pip && \
+    pip3 install --no-cache-dir runpod requests && \
+    rm -rf /var/lib/apt/lists/*
+
 ENV FOUNDRY_PORT=8080
+ENV FOUNDRY_HOST=127.0.0.1
 
 COPY deploy/runpod-start.sh /opt/foundry/start.sh
-COPY deploy/health_check.py /opt/foundry/health_check.py
+COPY deploy/handler.py /opt/foundry/handler.py
 RUN chmod +x /opt/foundry/start.sh
 
 WORKDIR /app
-EXPOSE 8080 8081
 
 ENTRYPOINT ["/opt/foundry/start.sh"]

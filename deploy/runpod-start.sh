@@ -5,9 +5,13 @@
 
 set -euo pipefail
 
-echo "[foundry] Starting RunPod health check sidecar on port ${PORT_HEALTH:-8081}..."
-python3 /opt/foundry/health_check.py &
+# 1. Start the RunPod Serverless Handler in the background.
+# It will poll `localhost:8080/health` until llama-server is ready,
+# then it will connect to RunPod's queue and start accepting jobs.
+echo "[foundry] Starting RunPod Python Handler..."
+python3 /opt/foundry/handler.py &
 
-# Delegate to the main, robust entrypoint that handles GPU detection,
+# 2. Delegate to the main, robust entrypoint that handles GPU detection,
 # profile loading, model downloading, and execs llama-server.
+# (This blocks and keeps the container alive)
 exec /opt/foundry/entrypoint.sh

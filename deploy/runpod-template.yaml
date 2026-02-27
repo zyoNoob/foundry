@@ -13,14 +13,12 @@ serverless:
   max_workers: 10
   idle_timeout: 300
   
-# Network (Load Balancing Mode)
-# 8080 = App, 8081 = Health
+# Ports
+# (Not strictly needed for Queue-based endpoints since RunPod SDK polls the queue, 
+# but good practice for internal container routing)
 ports:
   - container_port: 8080
     protocol: HTTP
-  - container_port: 8081
-    protocol: HTTP
 
 env:
-  PORT: "8080"
-  PORT_HEALTH: "8081"
+  FOUNDRY_PORT: "8080"
