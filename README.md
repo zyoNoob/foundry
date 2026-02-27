@@ -29,9 +29,9 @@ Works with any OpenAI-compatible client: Cursor, Continue, OpenCode, Open WebUI,
 
 ## Supported Hardware
 
-| GPU | VRAM | Context | Decode (tok/s) | Prompt (tok/s) |
-|-----|------|---------|----------------|----------------|
-| RTX 5090 | 32 GB | 192K | ~170 | ~1,163 |
+| GPU | VRAM | Context | Decode | 4-concurrent |
+|-----|------|---------|--------|--------------|
+| RTX 5090 | 32 GB | 192K | ~174 tok/s | ~320 tok/s |
 | Other NVIDIA (16GB+) | 16+ GB | 16K | varies | varies |
 
 *Benchmarked with `Qwen3.5-35B-A3B` using `UD-Q4_K_XL` quantization (Unsloth Dynamic 2.0).*
@@ -123,7 +123,7 @@ foundry/
 │       ├── Dockerfile           # FROM llama.cpp:server-cuda12
 │       ├── entrypoint.sh        # GPU detect, model download, launch
 │       └── profiles/
-│           ├── rtx5090.sh       # 192K ctx, q8_0 KV, 170 tok/s
+│           ├── rtx5090.sh       # 192K ctx, 4 slots, 320 tok/s aggregate
 │           └── default.sh       # 16K ctx, q4_0 KV, conservative
 ├── scripts/
 │   ├── benchmark.py             # Generation speed, prompt processing, throughput
@@ -137,16 +137,17 @@ foundry/
 
 ## Benchmark
 
-RTX 5090 profile results (Qwen3.5-35B-A3B UD-Q4_K_XL, 192K context):
+RTX 5090 profile results (Qwen3.5-35B-A3B UD-Q4_K_XL, 192K context, 4 slots):
 
 ```
-GENERATION SPEED:     ~170 tok/s (decode)
-PROMPT PROCESSING:  ~1,163 tok/s (encode, internal metric)
-GPU UTILIZATION:         92%
-MEMORY BANDWIDTH:        49% (bottleneck)
-POWER DRAW:             337W / 600W TDP
-TEMPERATURE:             52C (under sustained load)
-VRAM USAGE:           26.9 GB / 32.6 GB
+SINGLE-STREAM DECODE:    ~174 tok/s
+4-CONCURRENT AGGREGATE:  ~320 tok/s  (+84% via MoE expert batching)
+PROMPT PROCESSING:     ~1,163 tok/s  (internal metric)
+GPU UTILIZATION:            92%
+MEMORY BANDWIDTH:           49%      (bottleneck: 878 / 1,792 GB/s)
+POWER DRAW:                337W / 575W TDP
+TEMPERATURE:                52C      (under sustained load)
+VRAM USAGE:              26.1 GB / 32.6 GB (6 GB headroom)
 ```
 
 Run your own benchmark:
@@ -159,7 +160,10 @@ python3 scripts/benchmark.py --url http://localhost:8080 --mode all
 
 ### Qwen3.5-35B-A3B
 
-- **Architecture**: Hybrid Gated DeltaNet + MoE (35B total, 3B active)
+- **Architecture**: Hybrid Gated DeltaNet + MoE (35B total, 3B active per token)
+  - 30 recurrent layers (Gated DeltaNet, fixed-size state, no KV cache)
+  - 10 full attention layers (standard KV cache, GQA 8:1)
+  - 256 experts per MoE layer, top-8 + 1 shared active per token
 - **Quantization**: UD-Q4_K_XL via [Unsloth](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF) (Dynamic 2.0)
 - **Disk size**: ~20.6 GB
 - **Min VRAM**: 16 GB (with expert offloading)
