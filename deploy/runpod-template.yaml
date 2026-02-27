@@ -1,0 +1,72 @@
+# RunPod Serverless Template for Foundry
+# ==============================================================================
+# This template can be used to deploy Foundry as a RunPod Serverless Endpoint
+# ==============================================================================
+#
+# Deployment Options:
+#
+# Option 1: Use pre-built image from GHCR (recommended)
+#   - Image: ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
+#   - No build required, just deploy
+#
+# Option 2: Build from source
+#   - Clone: git clone https://github.com/infernet-org/foundry.git
+#   - Build: docker build -f deploy/Dockerfile.runpod -t foundry-runpod .
+#   - Push to your registry
+#   - Deploy on RunPod
+#
+# ==============================================================================
+
+name: foundry-qwen35-35b-a3b
+description: Foundry inference endpoint for Qwen3.5-35B-A3B
+
+# Docker image (use GHCR for pre-built)
+image: ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
+
+# GPU configuration
+gpu:
+  type: RTX4090          # Options: RTX3090, RTX4090, A100, H100
+  count: 1
+  
+# Or for RTX 5090 (when available on RunPod)
+# gpu:
+#   type: RTX5090
+#   count: 1
+
+# Resources
+resources:
+  memory: 32Gi           # Minimum for 35B model
+  cpu: 4
+
+# Environment variables (override defaults)
+env:
+  FOUNDRY_PORT: "8080"
+  FOUNDRY_CTX_LENGTH: "65536"
+  FOUNDRY_THREADS: "16"
+  FOUNDRY_PARALLEL: "2"
+  # FOUNDRY_PROFILE: "rtx4090"  # Uncomment to force a specific profile
+
+# Health check
+healthcheck:
+  path: /health
+  port: 8080
+  interval: 30s
+  timeout: 10s
+
+# Serverless configuration
+serverless:
+  min_workers: 0         # Scale to zero when idle
+  max_workers: 10        # Maximum concurrent workers
+  idle_timeout: 300      # 5 minutes idle before scale down
+  scale_up_delay: 30     # Wait before scaling up
+  
+# Network
+ports:
+  - container_port: 8080
+    protocol: HTTP
+    
+# Volume (optional - for caching models between restarts)
+# volumes:
+#   - name: model-cache
+#     path: /models
+#     size: 50Gi
