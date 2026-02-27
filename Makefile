@@ -27,7 +27,6 @@ run: ## Run the model container (auto-detect GPU)
 	@mkdir -p $(MODELS_DIR)
 	docker run --gpus all \
 		--shm-size 2g \
-		--sysctl net.ipv4.tcp_congestion_control=bbr \
 		--sysctl net.core.somaxconn=4096 \
 		--sysctl net.ipv4.tcp_keepalive_time=60 \
 		-p $(PORT):8080 \
@@ -40,7 +39,6 @@ run-profile: ## Run with explicit profile (PROFILE=rtx4090)
 	@mkdir -p $(MODELS_DIR)
 	docker run --gpus all \
 		--shm-size 2g \
-		--sysctl net.ipv4.tcp_congestion_control=bbr \
 		--sysctl net.core.somaxconn=4096 \
 		--sysctl net.ipv4.tcp_keepalive_time=60 \
 		-p $(PORT):8080 \
