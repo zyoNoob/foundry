@@ -19,7 +19,7 @@ FROM ghcr.io/ggml-org/llama.cpp:server-cuda12
 # Install huggingface-cli for model download (~50MB layer)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip \
-    && pip3 install --no-cache-dir --break-system-packages huggingface-hub \
+    && pip3 install --no-cache-dir huggingface-hub \
     && rm -rf /var/lib/apt/lists/*
 
 # Model metadata
