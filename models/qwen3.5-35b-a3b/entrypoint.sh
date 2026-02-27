@@ -50,15 +50,8 @@ detect_gpu() {
     # Map GPU name to profile
     case "$gpu_name" in
         *"5090"*)       echo "rtx5090" ;;
-        *"5080"*)       echo "rtx5080" ;;
-        *"4090"*)       echo "rtx4090" ;;
-        *"4080"*)       echo "rtx4080" ;;
-        *"3090"*)       echo "rtx3090" ;;
-        *"A100"*"80G"*) echo "a100-80g" ;;
-        *"A100"*)       echo "a100-80g" ;;
-        *"H100"*)       echo "h100" ;;
         *)
-            warn "Unknown GPU '${gpu_name}', using default profile"
+            warn "Unknown or unsupported GPU '${gpu_name}', using default profile"
             echo "default"
             ;;
     esac

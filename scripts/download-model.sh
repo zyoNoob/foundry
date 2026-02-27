@@ -3,7 +3,7 @@
 # Foundry: Download model GGUF
 # ==============================================================================
 # Usage:
-#   ./scripts/download-model.sh                         # Default Q4_K_M
+#   ./scripts/download-model.sh                         # Default UD-Q4_K_XL
 #   ./scripts/download-model.sh --quant Q8_0            # Different quant
 #   ./scripts/download-model.sh --output /path/to/dir   # Custom directory
 # ==============================================================================
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO="unsloth/Qwen3.5-35B-A3B-GGUF"
-QUANT="Q4_K_M"
+QUANT="UD-Q4_K_XL"
 OUTPUT_DIR="${HOME}/.cache/foundry"
 
 while [[ $# -gt 0 ]]; do

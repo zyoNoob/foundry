@@ -32,19 +32,15 @@ Works with any OpenAI-compatible client: Cursor, Continue, OpenCode, Open WebUI,
 
 ## Supported Hardware
 
-| GPU | VRAM | Expected tok/s | Status |
-|-----|------|---------------|--------|
-| RTX 5090 | 32 GB | ~160 | Tested |
-| RTX 5080 | 16 GB | ~75 | Community |
-| RTX 4090 | 24 GB | ~70 | Community |
-| RTX 3090 | 24 GB | ~55 | Community |
-| A100 80GB | 80 GB | ~80 | Planned |
+| GPU | VRAM | Expected tok/s (Decode) | Expected tok/s (Encode) |
+|-----|------|-------------------------|-------------------------|
+| RTX 5090 | 32 GB | ~115 | ~3500 |
 
-All numbers are for Qwen3.5-35B-A3B Q4_K_M quantization, single GPU.
+*Metrics based on `Qwen3.5-35B-A3B` using `UD-Q4_K_XL` (Unsloth Dynamic 2.0 quantization).*
 
 ## How It Works
 
-Foundry uses [llama.cpp](https://github.com/ggml-org/llama.cpp) as the inference engine, built on the official [`server-cuda13`](https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp) image (CUDA 13.1, Blackwell-ready).
+Foundry uses [llama.cpp](https://github.com/ggml-org/llama.cpp) as the inference engine, built on the official [`server-cuda12`](https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp) image (CUDA 12, maximizing host compatibility).
 
 Why not SGLang or vLLM? Because for **consumer GPUs**, llama.cpp's expert-level MoE offloading (`--fit on`) is the only way to run a 35B-parameter MoE model on a single 16-24GB card at full speed. SGLang and vLLM require the entire model to fit in VRAM.
 
@@ -72,7 +68,7 @@ docker run --gpus all -p 8080:8080 \
   ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
 ```
 
-Available profiles: `rtx5090`, `rtx5080`, `rtx4090`, `rtx3090`, `a100-80g`, `h100`, `default`
+Available profiles: `rtx5090`, `default`
 
 ## Build From Source
 
@@ -101,11 +97,11 @@ All settings can be overridden via environment variables:
 ```
 foundry/
 ├── models/
-│   └── qwen3.5-35b-a3b/        # Model image (FROM llama.cpp:server-cuda13)
+│   └── qwen3.5-35b-a3b/        # Model image (FROM llama.cpp:server-cuda12)
 │       ├── Dockerfile
 │       ├── entrypoint.sh
-│       └── profiles/            # Per-GPU tuned launch configs
-├── scripts/                     # Build, run, benchmark, deploy helpers
+│       └── profiles/            # RTX 5090 tuned launch configs
+├── scripts/                     # Benchmark helpers
 └── docker-compose.yml           # Easy local deployment
 ```
 
@@ -114,8 +110,8 @@ foundry/
 ### Qwen3.5-35B-A3B
 
 - **Architecture**: Hybrid Gated DeltaNet + MoE (35B total, 3B active)
-- **Quantization**: Q4_K_M via [unsloth](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF)
-- **Disk size**: ~20 GB
+- **Quantization**: UD-Q4_K_XL via [unsloth](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF) (Dynamic 2.0 format)
+- **Disk size**: ~20.6 GB
 - **Min VRAM**: 16 GB (with expert offloading)
 - **Context**: Up to 262K native, default varies by GPU profile
 

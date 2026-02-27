@@ -55,6 +55,8 @@ test: ## Smoke test: start container, wait for health, send one request
 	@mkdir -p $(MODELS_DIR)
 	@docker run --gpus all -d \
 		--shm-size 2g \
+		--sysctl net.core.somaxconn=4096 \
+		--sysctl net.ipv4.tcp_keepalive_time=60 \
 		-p $(PORT):8080 \
 		-v $(MODELS_DIR):/models \
 		--name foundry-test-$(MODEL) \
