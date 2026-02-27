@@ -11,10 +11,7 @@
 services:
   qwen3.5-35b-a3b:
     build:
-      context: .
-      dockerfile: models/qwen3.5-35b-a3b/Dockerfile
-      args:
-        BASE_IMAGE: foundry-base-llama-cpp:latest
+      context: models/qwen3.5-35b-a3b/
     ports:
       - "${FOUNDRY_PORT:-8080}:8080"
     volumes:

@@ -44,7 +44,8 @@ detect_gpu() {
         return
     fi
 
-    log "Detected GPU: ${gpu_name}"
+    # Log to stderr so it doesn't interfere with the captured profile name
+    echo -e "${CYAN}[foundry]${NC} Detected GPU: ${gpu_name}" >&2
 
     # Map GPU name to profile
     case "$gpu_name" in
@@ -104,15 +105,21 @@ download_model() {
     log "This is a one-time download (~20GB). Subsequent starts will be instant."
     echo ""
 
-    # Use huggingface-cli if available, fall back to curl
-    if command -v huggingface-cli &> /dev/null; then
-        huggingface-cli download \
-            "${FOUNDRY_GGUF_REPO}" \
-            "${FOUNDRY_GGUF_FILE}" \
-            --local-dir "${MODELS_DIR}" \
-            --local-dir-use-symlinks False
+    # Use python3 huggingface_hub to download (huggingface-cli may not be on PATH)
+    if python3 -c "import huggingface_hub" 2>/dev/null; then
+        python3 -c "
+import os
+from huggingface_hub import hf_hub_download
+token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
+hf_hub_download(
+    repo_id='${FOUNDRY_GGUF_REPO}',
+    filename='${FOUNDRY_GGUF_FILE}',
+    local_dir='${MODELS_DIR}',
+    token=token
+)
+"
     else
-        err "huggingface-cli not found. Please mount the GGUF at ${gguf_path}"
+        err "huggingface-hub not found. Please mount the GGUF at ${gguf_path}"
         err "Or install huggingface-hub: pip install huggingface-hub"
         exit 1
     fi
@@ -134,8 +141,8 @@ download_model() {
 build_command() {
     local gguf_path="${MODELS_DIR}/${FOUNDRY_GGUF_FILE}"
 
-    # Start with base command
-    local cmd="llama-server"
+    # Start with base command (official image puts binary at /app/llama-server)
+    local cmd="/app/llama-server"
     cmd+=" --model ${gguf_path}"
     cmd+=" --host 0.0.0.0"
     cmd+=" --port ${FOUNDRY_PORT:-8080}"
@@ -154,10 +161,9 @@ build_command() {
     local fit="${PROFILE_FIT:-on}"
     cmd+=" --fit ${fit}"
 
-    # Flash attention
-    if [ "${PROFILE_FLASH_ATTN:-true}" = "true" ]; then
-        cmd+=" -fa"
-    fi
+    # Flash attention (new llama.cpp requires explicit on/off/auto value)
+    local fa="${PROFILE_FLASH_ATTN:-on}"
+    cmd+=" --flash-attn ${fa}"
 
     # KV cache quantization
     local ctk="${PROFILE_KV_TYPE_K:-q8_0}"

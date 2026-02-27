@@ -61,8 +61,6 @@ def api_request(method, path, api_key, json_data=None):
 def create_template(api_key, name):
     """Create a serverless template for the Foundry image."""
     print(f"Creating template '{name}'...")
-    from urllib.parse import quote
-
     url = f"https://api.runpod.io/graphql?api_key={api_key}"
     query = """
     mutation saveTemplate($input: SaveTemplateInput!) {

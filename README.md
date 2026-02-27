@@ -42,7 +42,9 @@ All numbers are for Qwen3.5-35B-A3B Q4_K_M quantization, single GPU.
 
 ## How It Works
 
-Foundry uses [llama.cpp](https://github.com/ggerganov/llama.cpp) as the inference engine. Why not SGLang or vLLM? Because for **consumer GPUs**, llama.cpp's expert-level MoE offloading (`--fit on`) is the only way to run a 35B-parameter MoE model on a single 16-24GB card at full speed. SGLang and vLLM require the entire model to fit in VRAM.
+Foundry uses [llama.cpp](https://github.com/ggml-org/llama.cpp) as the inference engine, built on the official [`server-cuda13`](https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp) image (CUDA 13.1, Blackwell-ready).
+
+Why not SGLang or vLLM? Because for **consumer GPUs**, llama.cpp's expert-level MoE offloading (`--fit on`) is the only way to run a 35B-parameter MoE model on a single 16-24GB card at full speed. SGLang and vLLM require the entire model to fit in VRAM.
 
 Qwen3.5-35B-A3B is a Mixture-of-Experts model: 35B total parameters but only 3B active per token. llama.cpp keeps attention and norms on GPU while spilling inactive experts to CPU. This is why a 35B MoE model runs **3-10x faster** than a 27B dense model on the same hardware.
 
@@ -66,15 +68,12 @@ docker run --gpus all -p 8080:8080 \
   ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
 ```
 
-Available profiles: `rtx5090`, `rtx5080`, `rtx4090`, `rtx3090`, `a100-80g`, `default`
+Available profiles: `rtx5090`, `rtx5080`, `rtx4090`, `rtx3090`, `a100-80g`, `h100`, `default`
 
 ## Build From Source
 
 ```bash
-# Build the base llama.cpp image
-make build-base
-
-# Build the Qwen3.5 model image
+# Build the model image (pulls official llama.cpp base automatically)
 make build
 
 # Run locally
@@ -97,14 +96,14 @@ All settings can be overridden via environment variables:
 
 ```
 foundry/
-├── base/llama-cpp/          # Base image: llama.cpp + CUDA runtime
 ├── models/
-│   └── qwen3.5-35b-a3b/    # Model-specific image + profiles
+│   └── qwen3.5-35b-a3b/        # Model image (FROM llama.cpp:server-cuda13)
 │       ├── Dockerfile
 │       ├── entrypoint.sh
-│       └── profiles/        # Per-GPU tuned launch configs
-├── scripts/                 # Build, run, download helpers
-└── docker-compose.yml       # Easy local deployment
+│       └── profiles/            # Per-GPU tuned launch configs
+├── deploy/                      # RunPod Serverless deployment
+├── scripts/                     # Build, run, benchmark, deploy helpers
+└── docker-compose.yml           # Easy local deployment
 ```
 
 ## Models

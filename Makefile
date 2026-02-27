@@ -4,14 +4,11 @@
 
 REGISTRY ?= ghcr.io/infernet-org/foundry
 MODEL ?= qwen3.5-35b-a3b
-CUDA_VERSION ?= 12.8.0
-CUDA_ARCH ?= 86;89;120
-BASE_TAG ?= $(REGISTRY)/base-llama-cpp
 MODEL_TAG ?= $(REGISTRY)/$(MODEL)
 PORT ?= 8080
 MODELS_DIR ?= $(HOME)/.cache/foundry
 
-.PHONY: help build-base build run test push clean download
+.PHONY: help build run test push clean download
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -19,20 +16,8 @@ help: ## Show this help
 
 # --- Build -------------------------------------------------------------------
 
-build-base: ## Build the base llama.cpp image
+build: ## Build the model image
 	docker build \
-		--build-arg CUDA_VERSION=$(CUDA_VERSION) \
-		--build-arg CUDA_ARCH="$(CUDA_ARCH)" \
-		-t $(BASE_TAG):latest \
-		-t $(BASE_TAG):cu$(subst .,,$(word 1,$(subst ., ,$(CUDA_VERSION)))$(word 2,$(subst ., ,$(CUDA_VERSION)))) \
-		base/llama-cpp/
-
-build-base-cu124: ## Build base image for CUDA 12.4 (RTX 30/40 series)
-	$(MAKE) build-base CUDA_VERSION=12.4.1 CUDA_ARCH="86;89"
-
-build: build-base ## Build the model image
-	docker build \
-		--build-arg BASE_IMAGE=$(BASE_TAG):latest \
 		-t $(MODEL_TAG):latest \
 		models/$(MODEL)/
 
@@ -100,19 +85,16 @@ download: ## Download the GGUF model file
 
 # --- Push --------------------------------------------------------------------
 
-push: ## Push images to GHCR
-	docker push $(BASE_TAG):latest
+push: ## Push model image to GHCR
 	docker push $(MODEL_TAG):latest
 
 push-all: ## Push all tags to GHCR
-	docker push --all-tags $(BASE_TAG)
 	docker push --all-tags $(MODEL_TAG)
 
 # --- Clean -------------------------------------------------------------------
 
 clean: ## Remove local images
 	-docker rmi $(MODEL_TAG):latest
-	-docker rmi $(BASE_TAG):latest
 
 clean-models: ## Remove downloaded models
 	rm -rf $(MODELS_DIR)/*.gguf

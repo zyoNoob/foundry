@@ -66,15 +66,21 @@ ensure_model() {
     log "Downloading model: ${FOUNDRY_GGUF_FILE}"
     log "This may take a few minutes on first cold start..."
     
-    if command -v huggingface-cli &> /dev/null; then
-        huggingface-cli download \
-            "${FOUNDRY_GGUF_REPO}" \
-            "${FOUNDRY_GGUF_FILE}" \
-            --local-dir "${MODELS_DIR}" \
-            --local-dir-use-symlinks False
+    if python3 -c "import huggingface_hub" 2>/dev/null; then
+        python3 -c "
+import os
+from huggingface_hub import hf_hub_download
+token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
+hf_hub_download(
+    repo_id='${FOUNDRY_GGUF_REPO}',
+    filename='${FOUNDRY_GGUF_FILE}',
+    local_dir='${MODELS_DIR}',
+    token=token
+)
+"
         log "Model downloaded successfully"
     else
-        log "ERROR: huggingface-cli not found"
+        log "ERROR: huggingface-hub not found"
         exit 1
     fi
 }
@@ -116,7 +122,7 @@ main() {
     log "  Threads: ${threads}"
     log "  Parallel: ${parallel}"
     
-    llama-server \
+    /app/llama-server \
         --model "${gguf_path}" \
         --host "${FOUNDRY_HOST:-0.0.0.0}" \
         --port "${FOUNDRY_PORT:-8080}" \
@@ -124,7 +130,7 @@ main() {
         --threads "${threads}" \
         --parallel "${parallel}" \
         --fit on \
-        -fa on \
+        --flash-attn on \
         -ctk q8_0 -ctv q8_0 \
         --no-mmap \
         --jinja \
