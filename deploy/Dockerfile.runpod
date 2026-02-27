@@ -1,18 +1,19 @@
 # ==============================================================================
 # Foundry RunPod Serverless Image
 # ==============================================================================
-# Thin layer on top of the model image adding RunPod-specific entrypoint
-# for graceful shutdown and health checking in a serverless context.
-# ==============================================================================
 
 ARG BASE_IMAGE=ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
 FROM ${BASE_IMAGE}
 
+ENV PORT=8080
+ENV PORT_HEALTH=8081
 ENV FOUNDRY_PORT=8080
-ENV PORT=80
-ENV PORT_HEALTH=80
+
+COPY deploy/runpod-start.sh /opt/foundry/start.sh
+COPY deploy/health_check.py /opt/foundry/health_check.py
+RUN chmod +x /opt/foundry/start.sh
 
 WORKDIR /app
-EXPOSE 80 8080
+EXPOSE 8080 8081
 
 ENTRYPOINT ["/opt/foundry/start.sh"]
