@@ -9,6 +9,9 @@ Foundry provides pre-configured Docker images with per-GPU hardware profiles tha
 ```bash
 # Run Qwen3.5-35B-A3B with auto-detected GPU settings
 docker run --gpus all -p 8080:8080 \
+  --sysctl net.ipv4.tcp_congestion_control=bbr \
+  --sysctl net.core.somaxconn=4096 \
+  --sysctl net.ipv4.tcp_keepalive_time=60 \
   -v ~/.cache/foundry:/models \
   ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
 ```
@@ -63,6 +66,9 @@ Each profile tunes: context length, KV cache quantization, thread count, memory 
 ```bash
 # Override auto-detection with a specific profile
 docker run --gpus all -p 8080:8080 \
+  --sysctl net.ipv4.tcp_congestion_control=bbr \
+  --sysctl net.core.somaxconn=4096 \
+  --sysctl net.ipv4.tcp_keepalive_time=60 \
   -v ~/.cache/foundry:/models \
   -e FOUNDRY_PROFILE=rtx4090 \
   ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
