@@ -55,16 +55,14 @@ if command -v huggingface-cli &> /dev/null; then
     huggingface-cli download \
         "${REPO}" \
         "${FILENAME}" \
-        --local-dir "${OUTPUT_DIR}" \
-        --local-dir-use-symlinks False
+        --local-dir "${OUTPUT_DIR}"
 else
     echo "huggingface-cli not found. Installing..."
     pip install --quiet huggingface-hub
     huggingface-cli download \
         "${REPO}" \
         "${FILENAME}" \
-        --local-dir "${OUTPUT_DIR}" \
-        --local-dir-use-symlinks False
+        --local-dir "${OUTPUT_DIR}"
 fi
 
 if [ -f "$FILEPATH" ]; then

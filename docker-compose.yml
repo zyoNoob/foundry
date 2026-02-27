@@ -5,7 +5,10 @@
 #   docker compose up
 #
 # With explicit profile:
-#   FOUNDRY_PROFILE=rtx4090 docker compose up
+#   FOUNDRY_PROFILE=rtx5090 docker compose up
+#
+# With HF token (create .env file with HF_TOKEN=hf_...):
+#   docker compose up
 # ==============================================================================
 
 services:
@@ -16,9 +19,13 @@ services:
       - "${FOUNDRY_PORT:-8080}:8080"
     volumes:
       - models-cache:/models
+    env_file:
+      - path: .env
+        required: false
     environment:
       - FOUNDRY_PROFILE=${FOUNDRY_PROFILE:-auto}
       - FOUNDRY_PORT=8080
+      - HF_TOKEN=${HF_TOKEN:-}
     deploy:
       resources:
         reservations:
@@ -27,6 +34,16 @@ services:
               count: 1
               capabilities: [gpu]
     shm_size: '2gb'
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack:
+        soft: 67108864
+        hard: 67108864
+    sysctls:
+      - net.core.somaxconn=4096
+      - net.ipv4.tcp_keepalive_time=60
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]

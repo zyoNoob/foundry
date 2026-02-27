@@ -8,7 +8,7 @@ MODEL_TAG ?= $(REGISTRY)/$(MODEL)
 PORT ?= 8080
 MODELS_DIR ?= $(HOME)/.cache/foundry
 
-.PHONY: help build run test push clean download
+.PHONY: help build run run-profile test benchmark push push-all clean clean-models download
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -27,6 +27,8 @@ run: ## Run the model container (auto-detect GPU)
 	@mkdir -p $(MODELS_DIR)
 	docker run --gpus all \
 		--shm-size 2g \
+		--ulimit memlock=-1:-1 \
+		--ulimit stack=67108864:67108864 \
 		--sysctl net.core.somaxconn=4096 \
 		--sysctl net.ipv4.tcp_keepalive_time=60 \
 		-p $(PORT):8080 \
@@ -39,6 +41,8 @@ run-profile: ## Run with explicit profile (PROFILE=rtx5090)
 	@mkdir -p $(MODELS_DIR)
 	docker run --gpus all \
 		--shm-size 2g \
+		--ulimit memlock=-1:-1 \
+		--ulimit stack=67108864:67108864 \
 		--sysctl net.core.somaxconn=4096 \
 		--sysctl net.ipv4.tcp_keepalive_time=60 \
 		-p $(PORT):8080 \
@@ -55,6 +59,8 @@ test: ## Smoke test: start container, wait for health, send one request
 	@mkdir -p $(MODELS_DIR)
 	@docker run --gpus all -d \
 		--shm-size 2g \
+		--ulimit memlock=-1:-1 \
+		--ulimit stack=67108864:67108864 \
 		--sysctl net.core.somaxconn=4096 \
 		--sysctl net.ipv4.tcp_keepalive_time=60 \
 		-p $(PORT):8080 \
@@ -89,6 +95,11 @@ test: ## Smoke test: start container, wait for health, send one request
 download: ## Download the GGUF model file
 	./scripts/download-model.sh
 
+# --- Benchmark ---------------------------------------------------------------
+
+benchmark: ## Run benchmark against a running server (PORT=8080)
+	python3 scripts/benchmark.py --url http://localhost:$(PORT) --mode all
+
 # --- Push --------------------------------------------------------------------
 
 push: ## Push model image to GHCR
@@ -103,4 +114,4 @@ clean: ## Remove local images
 	-docker rmi $(MODEL_TAG):latest
 
 clean-models: ## Remove downloaded models
-	rm -rf $(MODELS_DIR)/*.gguf
+	rm -rf "$(MODELS_DIR)"/*.gguf

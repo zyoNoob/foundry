@@ -1,0 +1,131 @@
+#!/bin/bash
+# ==============================================================================
+# Foundry: Host Kernel Tuning for Inference Latency
+# ==============================================================================
+# Run this ONCE on the Docker host to optimize kernel parameters for LLM
+# inference workloads. Requires root/sudo.
+#
+# Usage:
+#   sudo ./scripts/host-setup.sh
+#
+# These changes are NOT persistent across reboots. To make them permanent,
+# add them to /etc/sysctl.d/99-foundry.conf and update GRUB for hugepages.
+# ==============================================================================
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log()  { echo -e "${CYAN}[foundry-host]${NC} $*"; }
+warn() { echo -e "${YELLOW}[foundry-host]${NC} $*" >&2; }
+ok()   { echo -e "${GREEN}[foundry-host]${NC} $*"; }
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo -e "${RED}ERROR: This script must be run as root (sudo)${NC}" >&2
+    exit 1
+fi
+
+echo ""
+echo -e "${GREEN}============================================================${NC}"
+echo -e "${GREEN} Foundry Host Kernel Tuning${NC}"
+echo -e "${GREEN}============================================================${NC}"
+echo ""
+
+# ==============================================================================
+# Memory: Reduce swappiness to keep model weights in RAM
+# ==============================================================================
+CURRENT_SWAPPINESS=$(cat /proc/sys/vm/swappiness)
+log "vm.swappiness: ${CURRENT_SWAPPINESS} -> 10"
+sysctl -w vm.swappiness=10 > /dev/null
+ok "vm.swappiness = 10 (model weights stay in RAM)"
+
+# ==============================================================================
+# Memory: Allow overcommit for reliable mlock() on large models
+# ==============================================================================
+CURRENT_OVERCOMMIT=$(cat /proc/sys/vm/overcommit_memory)
+log "vm.overcommit_memory: ${CURRENT_OVERCOMMIT} -> 1"
+sysctl -w vm.overcommit_memory=1 > /dev/null
+ok "vm.overcommit_memory = 1 (mlock() always succeeds)"
+
+# ==============================================================================
+# Memory: Dirty page writeback tuning (reduce I/O contention during model load)
+# ==============================================================================
+sysctl -w vm.dirty_ratio=80 > /dev/null
+sysctl -w vm.dirty_background_ratio=5 > /dev/null
+ok "vm.dirty_ratio = 80, vm.dirty_background_ratio = 5"
+
+# ==============================================================================
+# Memory: Hugepages for reduced TLB misses on large model allocations
+# ==============================================================================
+CURRENT_HUGEPAGES=$(cat /proc/sys/vm/nr_hugepages)
+TARGET_HUGEPAGES=1280  # ~2.5GB of hugepages (1280 * 2MB)
+if [ "$CURRENT_HUGEPAGES" -lt "$TARGET_HUGEPAGES" ]; then
+    log "vm.nr_hugepages: ${CURRENT_HUGEPAGES} -> ${TARGET_HUGEPAGES}"
+    sysctl -w vm.nr_hugepages=${TARGET_HUGEPAGES} > /dev/null
+    ok "vm.nr_hugepages = ${TARGET_HUGEPAGES} (~2.5GB hugepages allocated)"
+else
+    ok "vm.nr_hugepages already >= ${TARGET_HUGEPAGES} (${CURRENT_HUGEPAGES})"
+fi
+
+# ==============================================================================
+# Network: TCP tuning for API latency
+# ==============================================================================
+sysctl -w net.core.somaxconn=4096 > /dev/null
+sysctl -w net.ipv4.tcp_keepalive_time=60 > /dev/null
+sysctl -w net.core.rmem_max=16777216 > /dev/null
+sysctl -w net.core.wmem_max=16777216 > /dev/null
+sysctl -w net.ipv4.tcp_fastopen=3 > /dev/null
+ok "TCP tuning applied (somaxconn=4096, fastopen=3, buffers=16MB)"
+
+# ==============================================================================
+# CPU: Set performance governor (disable frequency scaling)
+# ==============================================================================
+if command -v cpupower &> /dev/null; then
+    CURRENT_GOV=$(cpupower frequency-info -p 2>/dev/null | grep -oP '"[^"]*"' | tr -d '"' || echo "unknown")
+    log "CPU governor: ${CURRENT_GOV} -> performance"
+    cpupower frequency-set -g performance > /dev/null 2>&1 || warn "Could not set CPU governor (may require kernel module)"
+    ok "CPU governor set to performance"
+elif [ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]; then
+    for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        echo "performance" > "$gov" 2>/dev/null || true
+    done
+    ok "CPU governor set to performance (via sysfs)"
+else
+    warn "cpupower not found and sysfs not available, skipping CPU governor"
+fi
+
+# ==============================================================================
+# NVIDIA: Enable persistence mode (avoid cold-start latency)
+# ==============================================================================
+if command -v nvidia-smi &> /dev/null; then
+    CURRENT_PM=$(nvidia-smi --query-gpu=persistence_mode --format=csv,noheader,nounits 2>/dev/null | head -1 | xargs)
+    if [ "$CURRENT_PM" != "Enabled" ]; then
+        log "NVIDIA persistence mode: ${CURRENT_PM} -> Enabled"
+        nvidia-smi -pm 1 > /dev/null 2>&1 || warn "Could not enable persistence mode"
+        ok "NVIDIA persistence mode enabled (avoids ~100-500ms cold start)"
+    else
+        ok "NVIDIA persistence mode already enabled"
+    fi
+else
+    warn "nvidia-smi not found, skipping GPU persistence mode"
+fi
+
+echo ""
+echo -e "${GREEN}============================================================${NC}"
+echo -e "${GREEN} Host tuning complete. Changes are NOT persistent.${NC}"
+echo -e "${GREEN} To persist, add to /etc/sysctl.d/99-foundry.conf:${NC}"
+echo -e "${CYAN}   vm.swappiness = 10${NC}"
+echo -e "${CYAN}   vm.overcommit_memory = 1${NC}"
+echo -e "${CYAN}   vm.dirty_ratio = 80${NC}"
+echo -e "${CYAN}   vm.dirty_background_ratio = 5${NC}"
+echo -e "${CYAN}   vm.nr_hugepages = ${TARGET_HUGEPAGES}${NC}"
+echo -e "${CYAN}   net.core.somaxconn = 4096${NC}"
+echo -e "${CYAN}   net.core.rmem_max = 16777216${NC}"
+echo -e "${CYAN}   net.core.wmem_max = 16777216${NC}"
+echo -e "${CYAN}   net.ipv4.tcp_fastopen = 3${NC}"
+echo -e "${GREEN}============================================================${NC}"
+echo ""

@@ -7,10 +7,7 @@ Foundry provides pre-configured Docker images with per-GPU hardware profiles tha
 ## Quick Start
 
 ```bash
-# Run Qwen3.5-35B-A3B with auto-detected GPU settings
 docker run --gpus all -p 8080:8080 \
-  --sysctl net.core.somaxconn=4096 \
-  --sysctl net.ipv4.tcp_keepalive_time=60 \
   -v ~/.cache/foundry:/models \
   ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
 ```
@@ -32,19 +29,20 @@ Works with any OpenAI-compatible client: Cursor, Continue, OpenCode, Open WebUI,
 
 ## Supported Hardware
 
-| GPU | VRAM | Expected tok/s (Decode) | Expected tok/s (Encode) |
-|-----|------|-------------------------|-------------------------|
-| RTX 5090 | 32 GB | ~115 | ~3500 |
+| GPU | VRAM | Context | Decode (tok/s) | Prompt (tok/s) |
+|-----|------|---------|----------------|----------------|
+| RTX 5090 | 32 GB | 192K | ~170 | ~1,163 |
+| Other NVIDIA (16GB+) | 16+ GB | 16K | varies | varies |
 
-*Metrics based on `Qwen3.5-35B-A3B` using `UD-Q4_K_XL` (Unsloth Dynamic 2.0 quantization).*
+*Benchmarked with `Qwen3.5-35B-A3B` using `UD-Q4_K_XL` quantization (Unsloth Dynamic 2.0).*
 
 ## How It Works
 
-Foundry uses [llama.cpp](https://github.com/ggml-org/llama.cpp) as the inference engine, built on the official [`server-cuda12`](https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp) image (CUDA 12, maximizing host compatibility).
+Foundry uses [llama.cpp](https://github.com/ggml-org/llama.cpp) as the inference engine, built on the official [`server-cuda12`](https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp) image.
 
-Why not SGLang or vLLM? Because for **consumer GPUs**, llama.cpp's expert-level MoE offloading (`--fit on`) is the only way to run a 35B-parameter MoE model on a single 16-24GB card at full speed. SGLang and vLLM require the entire model to fit in VRAM.
+Why not SGLang or vLLM? For **consumer GPUs**, llama.cpp's MoE expert offloading (`--fit on`) is the only engine that can run a 35B-parameter MoE model on a single 16-24GB card at full speed. SGLang and vLLM require the entire model to fit in VRAM.
 
-Qwen3.5-35B-A3B is a Mixture-of-Experts model: 35B total parameters but only 3B active per token. llama.cpp keeps attention and norms on GPU while spilling inactive experts to CPU. This is why a 35B MoE model runs **3-10x faster** than a 27B dense model on the same hardware.
+Qwen3.5-35B-A3B is a Mixture-of-Experts model: 35B total parameters but only 3B active per token. llama.cpp keeps attention layers on GPU while spilling inactive experts to CPU, which is why a 35B MoE runs **faster** than a 27B dense model on the same hardware.
 
 ### GPU Auto-Detection
 
@@ -56,29 +54,17 @@ On startup, Foundry:
 
 ### Hardware Profiles
 
-Each profile tunes: context length, KV cache quantization, thread count, memory fraction, flash attention, and MoE offloading strategy.
+Each profile tunes: context length, KV cache quantization, thread count, batch size, flash attention, thread priority, CPU affinity, and Prometheus metrics.
 
 ```bash
 # Override auto-detection with a specific profile
 docker run --gpus all -p 8080:8080 \
-  --sysctl net.core.somaxconn=4096 \
-  --sysctl net.ipv4.tcp_keepalive_time=60 \
   -v ~/.cache/foundry:/models \
-  -e FOUNDRY_PROFILE=rtx4090 \
+  -e FOUNDRY_PROFILE=rtx5090 \
   ghcr.io/infernet-org/foundry/qwen3.5-35b-a3b:latest
 ```
 
 Available profiles: `rtx5090`, `default`
-
-## Build From Source
-
-```bash
-# Build the model image (pulls official llama.cpp base automatically)
-make build
-
-# Run locally
-make run
-```
 
 ## Configuration
 
@@ -86,23 +72,87 @@ All settings can be overridden via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FOUNDRY_PROFILE` | `auto` | GPU profile (`auto`, `rtx5090`, `rtx4090`, etc.) |
+| `FOUNDRY_PROFILE` | `auto` | GPU profile (`auto`, `rtx5090`, `default`) |
 | `FOUNDRY_PORT` | `8080` | Server port |
 | `FOUNDRY_CTX_LENGTH` | Profile default | Context window size |
-| `FOUNDRY_THREADS` | Profile default | CPU threads for expert offloading |
-| `FOUNDRY_EXTRA_ARGS` | `` | Additional llama-server arguments |
+| `FOUNDRY_THREADS` | Profile default | CPU thread count |
+| `FOUNDRY_EXTRA_ARGS` | (empty) | Additional llama-server arguments (highest priority) |
+| `HF_TOKEN` | (empty) | Hugging Face token for authenticated downloads |
+
+## Docker Compose
+
+```bash
+# Basic
+docker compose up
+
+# With explicit profile
+FOUNDRY_PROFILE=rtx5090 docker compose up
+```
+
+Create a `.env` file for secrets:
+
+```
+HF_TOKEN=hf_your_token_here
+```
+
+## Host Kernel Tuning (Optional)
+
+For maximum performance, run the host tuning script once on the Docker host:
+
+```bash
+sudo ./scripts/host-setup.sh
+```
+
+This tunes: `vm.swappiness`, `vm.overcommit_memory`, hugepages, TCP buffers, CPU governor, and NVIDIA persistence mode. Changes are not persistent across reboots -- the script prints instructions for making them permanent.
+
+## Build From Source
+
+```bash
+make build    # Build the model image
+make run      # Run with auto-detected GPU
+make test     # Smoke test: start, wait for health, send one request
+make download # Download the GGUF model file to ~/.cache/foundry
+```
 
 ## Architecture
 
 ```
 foundry/
 ├── models/
-│   └── qwen3.5-35b-a3b/        # Model image (FROM llama.cpp:server-cuda12)
-│       ├── Dockerfile
-│       ├── entrypoint.sh
-│       └── profiles/            # RTX 5090 tuned launch configs
-├── scripts/                     # Benchmark helpers
-└── docker-compose.yml           # Easy local deployment
+│   └── qwen3.5-35b-a3b/
+│       ├── Dockerfile           # FROM llama.cpp:server-cuda12
+│       ├── entrypoint.sh        # GPU detect, model download, launch
+│       └── profiles/
+│           ├── rtx5090.sh       # 192K ctx, q8_0 KV, 170 tok/s
+│           └── default.sh       # 16K ctx, q4_0 KV, conservative
+├── scripts/
+│   ├── benchmark.py             # Generation speed, prompt processing, throughput
+│   ├── optimize_5090.py         # Multi-config A/B testing harness
+│   ├── download-model.sh        # Download GGUF outside Docker
+│   └── host-setup.sh            # Linux kernel tuning for inference
+├── docker-compose.yml
+├── Makefile
+└── .github/workflows/build.yml  # CI: build and push to GHCR
+```
+
+## Benchmark
+
+RTX 5090 profile results (Qwen3.5-35B-A3B UD-Q4_K_XL, 192K context):
+
+```
+GENERATION SPEED:     ~170 tok/s (decode)
+PROMPT PROCESSING:  ~1,163 tok/s (encode, internal metric)
+GPU UTILIZATION:         92%
+MEMORY BANDWIDTH:        49% (bottleneck)
+POWER DRAW:             337W / 600W TDP
+TEMPERATURE:             52C (under sustained load)
+VRAM USAGE:           26.9 GB / 32.6 GB
+```
+
+Run your own benchmark:
+
+```bash
+python3 scripts/benchmark.py --url http://localhost:8080 --mode all
 ```
 
 ## Models
@@ -110,10 +160,10 @@ foundry/
 ### Qwen3.5-35B-A3B
 
 - **Architecture**: Hybrid Gated DeltaNet + MoE (35B total, 3B active)
-- **Quantization**: UD-Q4_K_XL via [unsloth](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF) (Dynamic 2.0 format)
+- **Quantization**: UD-Q4_K_XL via [Unsloth](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF) (Dynamic 2.0)
 - **Disk size**: ~20.6 GB
 - **Min VRAM**: 16 GB (with expert offloading)
-- **Context**: Up to 262K native, default varies by GPU profile
+- **Max context**: 262K native, 192K default on RTX 5090
 
 ## License
 

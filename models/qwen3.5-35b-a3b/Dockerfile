@@ -1,8 +1,8 @@
 # ==============================================================================
 # Foundry Model Image: Qwen3.5-35B-A3B
 # ==============================================================================
-# Built on top of the official llama.cpp server image (CUDA 13, Blackwell-ready).
-# Adds huggingface-cli for model download, GPU auto-tuning profiles, and the
+# Built on top of the official llama.cpp server image (CUDA 12).
+# Adds huggingface-hub for model download, GPU auto-tuning profiles, and the
 # Foundry entrypoint.
 #
 # Weights are NOT baked in. They are downloaded on first run or mounted
@@ -16,10 +16,10 @@
 
 FROM ghcr.io/ggml-org/llama.cpp:server-cuda12
 
-# Install huggingface-cli for model download (~50MB layer)
+# Install huggingface-hub for model download (~50MB layer)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip \
-    && pip3 install --no-cache-dir huggingface-hub \
+    && pip3 install --no-cache-dir "huggingface-hub>=0.28,<1" \
     && rm -rf /var/lib/apt/lists/*
 
 # Model metadata
@@ -37,7 +37,7 @@ ENV FOUNDRY_EXTRA_ARGS=""
 # Copy profiles and entrypoint
 COPY profiles/ /opt/foundry/profiles/
 COPY entrypoint.sh /opt/foundry/entrypoint.sh
-RUN chmod +x /opt/foundry/entrypoint.sh /opt/foundry/profiles/*.sh
+RUN chmod +x /opt/foundry/entrypoint.sh
 
 # Model storage
 RUN mkdir -p /models

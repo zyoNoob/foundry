@@ -21,7 +21,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 log()  { echo -e "${CYAN}[foundry]${NC} $*"; }
-warn() { echo -e "${YELLOW}[foundry]${NC} $*"; }
+warn() { echo -e "${YELLOW}[foundry]${NC} $*" >&2; }
 err()  { echo -e "${RED}[foundry]${NC} $*" >&2; }
 
 # ==============================================================================
@@ -45,7 +45,7 @@ detect_gpu() {
     fi
 
     # Log to stderr so it doesn't interfere with the captured profile name
-    echo -e "${CYAN}[foundry]${NC} Detected GPU: ${gpu_name}" >&2
+    log "Detected GPU: ${gpu_name}" >&2
 
     # Map GPU name to profile
     case "$gpu_name" in
@@ -76,6 +76,7 @@ load_profile() {
     fi
 
     log "Loading profile: ${profile_name}"
+    # shellcheck source=profiles/default.sh
     source "$profile_file"
 }
 
@@ -99,15 +100,19 @@ download_model() {
     echo ""
 
     # Use python3 huggingface_hub to download (huggingface-cli may not be on PATH)
+    # Variables are passed via environment to avoid shell injection in inline Python
     if python3 -c "import huggingface_hub" 2>/dev/null; then
+        FOUNDRY_GGUF_REPO="${FOUNDRY_GGUF_REPO}" \
+        FOUNDRY_GGUF_FILE="${FOUNDRY_GGUF_FILE}" \
+        FOUNDRY_MODELS_DIR="${MODELS_DIR}" \
         python3 -c "
 import os
 from huggingface_hub import hf_hub_download
 token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
 hf_hub_download(
-    repo_id='${FOUNDRY_GGUF_REPO}',
-    filename='${FOUNDRY_GGUF_FILE}',
-    local_dir='${MODELS_DIR}',
+    repo_id=os.environ['FOUNDRY_GGUF_REPO'],
+    filename=os.environ['FOUNDRY_GGUF_FILE'],
+    local_dir=os.environ['FOUNDRY_MODELS_DIR'],
     token=token
 )
 "
@@ -134,60 +139,96 @@ hf_hub_download(
 build_command() {
     local gguf_path="${MODELS_DIR}/${FOUNDRY_GGUF_FILE}"
 
-    # Start with base command (official image puts binary at /app/llama-server)
-    local cmd="/app/llama-server"
-    cmd+=" --model ${gguf_path}"
-    cmd+=" --host 0.0.0.0"
-    cmd+=" --port ${FOUNDRY_PORT:-8080}"
+    # Use a bash array to safely handle arguments with spaces
+    local -a cmd=("/app/llama-server")
+    cmd+=("--model" "${gguf_path}")
+    cmd+=("--host" "0.0.0.0")
+    cmd+=("--port" "${FOUNDRY_PORT:-8080}")
 
     # Context length (env override > profile > default)
     local ctx="${FOUNDRY_CTX_LENGTH:-${PROFILE_CTX_LENGTH:-32768}}"
-    cmd+=" --ctx-size ${ctx}"
+    cmd+=("--ctx-size" "${ctx}")
 
     # Thread count (env override > profile > auto)
     local threads="${FOUNDRY_THREADS:-${PROFILE_THREADS:-}}"
     if [ -n "$threads" ]; then
-        cmd+=" --threads ${threads}"
+        cmd+=("--threads" "${threads}")
+    fi
+
+    # Batch thread count (can be higher than decode threads for prompt processing)
+    local threads_batch="${PROFILE_THREADS_BATCH:-${threads}}"
+    if [ -n "$threads_batch" ]; then
+        cmd+=("--threads-batch" "${threads_batch}")
     fi
 
     # Fit mode (MoE expert offloading)
     local fit="${PROFILE_FIT:-on}"
-    cmd+=" --fit ${fit}"
+    cmd+=("--fit" "${fit}")
 
     # Flash attention (new llama.cpp requires explicit on/off/auto value)
     local fa="${PROFILE_FLASH_ATTN:-on}"
-    cmd+=" --flash-attn ${fa}"
+    cmd+=("--flash-attn" "${fa}")
 
     # KV cache quantization
     local ctk="${PROFILE_KV_TYPE_K:-q8_0}"
     local ctv="${PROFILE_KV_TYPE_V:-q8_0}"
-    cmd+=" -ctk ${ctk} -ctv ${ctv}"
+    cmd+=("-ctk" "${ctk}" "-ctv" "${ctv}")
 
     # Memory mapping
     if [ "${PROFILE_NO_MMAP:-true}" = "true" ]; then
-        cmd+=" --no-mmap"
+        cmd+=("--no-mmap")
     fi
 
     # Jinja templates (for tool calling / chat templates)
     if [ "${PROFILE_JINJA:-true}" = "true" ]; then
-        cmd+=" --jinja"
+        cmd+=("--jinja")
     fi
 
     # Parallel slots for concurrent requests
     local slots="${PROFILE_PARALLEL:-2}"
-    cmd+=" --parallel ${slots}"
+    cmd+=("--parallel" "${slots}")
 
-    # Profile-specific extra args
+    # Thread priority for reduced scheduling latency
+    local prio="${PROFILE_PRIO:-0}"
+    if [ "$prio" != "0" ]; then
+        cmd+=("--prio" "${prio}")
+    fi
+
+    # Strict CPU placement for cache locality
+    if [ "${PROFILE_CPU_STRICT:-0}" = "1" ]; then
+        cmd+=("--cpu-strict" "1")
+    fi
+
+    # KV cache reuse for multi-turn chat (prefix sharing via KV shifting)
+    local cache_reuse="${PROFILE_CACHE_REUSE:-0}"
+    if [ "$cache_reuse" != "0" ]; then
+        cmd+=("--cache-reuse" "${cache_reuse}")
+    fi
+
+    # Disable web UI for headless server deployments
+    if [ "${PROFILE_NO_WEBUI:-false}" = "true" ]; then
+        cmd+=("--no-webui")
+    fi
+
+    # Prometheus-compatible metrics endpoint
+    if [ "${PROFILE_METRICS:-false}" = "true" ]; then
+        cmd+=("--metrics")
+    fi
+
+    # Profile-specific extra args (split on spaces intentionally)
     if [ -n "${PROFILE_EXTRA_ARGS:-}" ]; then
-        cmd+=" ${PROFILE_EXTRA_ARGS}"
+        # shellcheck disable=SC2206
+        cmd+=(${PROFILE_EXTRA_ARGS})
     fi
 
-    # User extra args (highest priority override)
+    # User extra args (highest priority override, split on spaces intentionally)
     if [ -n "${FOUNDRY_EXTRA_ARGS:-}" ]; then
-        cmd+=" ${FOUNDRY_EXTRA_ARGS}"
+        # shellcheck disable=SC2206
+        cmd+=(${FOUNDRY_EXTRA_ARGS})
     fi
 
-    echo "$cmd"
+    # Store the array globally so main() can exec it safely
+    FOUNDRY_CMD=("${cmd[@]}")
 }
 
 # ==============================================================================
@@ -196,10 +237,10 @@ build_command() {
 
 main() {
     echo ""
-    echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║           Foundry Inference              ║${NC}"
-    echo -e "${GREEN}║   github.com/infernet-org/foundry        ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║            Foundry Inference               ║${NC}"
+    echo -e "${GREEN}║   github.com/infernet-org/foundry          ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════╝${NC}"
     echo ""
 
     log "Model: ${FOUNDRY_MODEL_NAME}"
@@ -218,20 +259,20 @@ main() {
     # 3. Download model if needed
     download_model
 
-    # 4. Build and display launch command
-    local cmd
-    cmd=$(build_command)
+    # 4. Build launch command (sets FOUNDRY_CMD array directly, no subshell)
+    build_command
 
     echo ""
     log "Launch command:"
-    echo -e "${CYAN}  ${cmd}${NC}"
+    echo -e "${CYAN}  ${FOUNDRY_CMD[*]}${NC}"
     echo ""
     log "OpenAI-compatible API will be available at:"
     echo -e "${GREEN}  http://localhost:${FOUNDRY_PORT:-8080}/v1/chat/completions${NC}"
     echo ""
 
     # 5. Launch (exec replaces shell process for proper signal handling)
-    exec $cmd
+    # Use the array form to avoid word-splitting issues
+    exec "${FOUNDRY_CMD[@]}"
 }
 
 main "$@"
