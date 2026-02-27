@@ -7,6 +7,11 @@ models-cache/
 # Environment
 .env
 .env.local
+*.env
+
+# Secrets / credentials
+credentials.json
+*secret*
 
 # Python
 __pycache__/

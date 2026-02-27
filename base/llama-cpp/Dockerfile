@@ -5,22 +5,24 @@
 # runtime image with just the llama-server binary.
 #
 # Build args:
-#   CUDA_VERSION  - CUDA toolkit version (default: 12.8.0)
+#   CUDA_VERSION  - CUDA toolkit version (default: 13.0.2)
+#   UBUNTU_VERSION - Ubuntu version (default: 24.04)
 #   CUDA_ARCH     - Target GPU architectures (default: 86;89;120)
 #   LLAMA_CPP_REF - llama.cpp git ref to build (default: master)
 #
 # Usage:
-#   docker build -t foundry-base-llama-cpp:cu128 .
-#   docker build --build-arg CUDA_VERSION=12.4.1 --build-arg CUDA_ARCH="86;89" \
-#     -t foundry-base-llama-cpp:cu124 .
+#   docker build -t foundry-base-llama-cpp:cu130 .
+#   docker build --build-arg CUDA_VERSION=12.8.0 --build-arg UBUNTU_VERSION=22.04 \
+#     -t foundry-base-llama-cpp:cu128 .
 # ==============================================================================
 
-ARG CUDA_VERSION=12.8.0
+ARG CUDA_VERSION=13.0.2
+ARG UBUNTU_VERSION=24.04
 
 # -----------------------------------------------------------------------------
 # Stage 1: Build llama.cpp from source
 # -----------------------------------------------------------------------------
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04 AS build
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS build
 
 ARG CUDA_ARCH="86;89;120"
 ARG LLAMA_CPP_REF=master
@@ -29,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     cmake \
     build-essential \
+    libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -48,14 +51,15 @@ RUN cmake -B build \
 # -----------------------------------------------------------------------------
 # Stage 2: Slim runtime image
 # -----------------------------------------------------------------------------
-FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04 AS runtime
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     python3 \
     python3-pip \
-    && pip3 install --no-cache-dir huggingface-hub \
+    libcurl4 \
+    && pip3 install --no-cache-dir --break-system-packages huggingface-hub \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy llama-server binary and required libraries

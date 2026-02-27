@@ -20,12 +20,14 @@ jobs:
     strategy:
       matrix:
         include:
+          - cuda_version: "13.0.2"
+            ubuntu_version: "24.04"
+            cuda_arch: "86;89;120"
+            tag_suffix: "cu130"
           - cuda_version: "12.8.0"
+            ubuntu_version: "22.04"
             cuda_arch: "86;89;120"
             tag_suffix: "cu128"
-          - cuda_version: "12.4.1"
-            cuda_arch: "86;89"
-            tag_suffix: "cu124"
 
     steps:
       - name: Checkout
@@ -49,9 +51,10 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ env.REGISTRY }}/base-llama-cpp:${{ matrix.tag_suffix }}
-            ${{ matrix.tag_suffix == 'cu128' && format('{0}/base-llama-cpp:latest', env.REGISTRY) || '' }}
+            ${{ matrix.tag_suffix == 'cu130' && format('{0}/base-llama-cpp:latest', env.REGISTRY) || '' }}
           build-args: |
             CUDA_VERSION=${{ matrix.cuda_version }}
+            UBUNTU_VERSION=${{ matrix.ubuntu_version }}
             CUDA_ARCH=${{ matrix.cuda_arch }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
