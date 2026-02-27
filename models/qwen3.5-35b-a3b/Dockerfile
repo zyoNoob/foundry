@@ -14,7 +14,7 @@
 #     foundry-qwen3.5-35b-a3b
 # ==============================================================================
 
-FROM ghcr.io/ggml-org/llama.cpp:server-cuda13
+FROM ghcr.io/ggml-org/llama.cpp:server-cuda12
 
 # Install huggingface-cli for model download (~50MB layer)
 RUN apt-get update && apt-get install -y --no-install-recommends \
