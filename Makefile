@@ -35,7 +35,7 @@ run: ## Run the model container (auto-detect GPU)
 		--rm \
 		$(MODEL_TAG):latest
 
-run-profile: ## Run with explicit profile (PROFILE=rtx4090)
+run-profile: ## Run with explicit profile (PROFILE=rtx5090)
 	@mkdir -p $(MODELS_DIR)
 	docker run --gpus all \
 		--shm-size 2g \
