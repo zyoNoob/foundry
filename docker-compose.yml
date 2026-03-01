@@ -27,6 +27,7 @@ services:
     volumes:
       - ~/.cache/foundry:/models
       - ./models/qwen3.5-35b-a3b/chat_template.jinja:/opt/foundry/chat_template.jinja:ro
+      - ./models/qwen3.5-35b-a3b/profiles:/opt/foundry/profiles:ro
     env_file:
       - path: .env
         required: false

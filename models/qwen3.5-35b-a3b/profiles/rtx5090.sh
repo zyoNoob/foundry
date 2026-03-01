@@ -24,23 +24,23 @@
 #   --poll 100, --prio-batch 2, --flash-attn auto, nvidia-smi -lgc 3105
 # ==============================================================================
 
-PROFILE_CTX_LENGTH=262144       # 192K context -- uses ~2GB KV, fits with 5GB headroom
-PROFILE_THREADS=16              # Physical cores (avoid hyperthreads for decode)
-PROFILE_THREADS_BATCH=20        # Higher thread count for prompt processing
-PROFILE_FIT="on"                # Auto GPU/CPU split (all-GPU at 32GB)
-PROFILE_FLASH_ATTN="on"         # Flash attention for long context perf
-PROFILE_KV_TYPE_K="q8_0"        # KV cache key quantization
-PROFILE_KV_TYPE_V="q8_0"        # KV cache value quantization
-PROFILE_NO_MMAP="true"          # Avoid page faults, load model into RAM
-PROFILE_JINJA="true"            # Chat template / tool calling support
-PROFILE_PARALLEL=4              # 4 concurrent slots: +84% aggregate throughput via MoE batching
-                                # (CUDA graphs for MUL_MAT_ID at BS 1-4, PR #19645)
-                                # Single-stream decode unchanged at ~174 tok/s, only +840 MiB VRAM
-PROFILE_PRIO=2                  # High thread priority for reduced scheduling latency
-PROFILE_CPU_STRICT=1            # Strict CPU placement for cache locality
-PROFILE_CACHE_REUSE=256         # KV cache reuse for multi-turn chat prefix sharing
-PROFILE_NO_WEBUI="true"         # Headless: no web UI, reduce attack surface
-PROFILE_METRICS="true"          # Prometheus-compatible /metrics endpoint
+PROFILE_CTX_LENGTH=262144 # 192K context -- uses ~2GB KV, fits with 5GB headroom
+PROFILE_THREADS=16        # Physical cores (avoid hyperthreads for decode)
+PROFILE_THREADS_BATCH=20  # Higher thread count for prompt processing
+PROFILE_FIT="on"          # Auto GPU/CPU split (all-GPU at 32GB)
+PROFILE_FLASH_ATTN="on"   # Flash attention for long context perf
+PROFILE_KV_TYPE_K="q8_0"  # KV cache key quantization
+PROFILE_KV_TYPE_V="q8_0"  # KV cache value quantization
+PROFILE_NO_MMAP="true"    # Avoid page faults, load model into RAM
+PROFILE_JINJA="true"      # Chat template / tool calling support
+PROFILE_PARALLEL=1        # 4 concurrent slots: +84% aggregate throughput via MoE batching
+# (CUDA graphs for MUL_MAT_ID at BS 1-4, PR #19645)
+# Single-stream decode unchanged at ~174 tok/s, only +840 MiB VRAM
+PROFILE_PRIO=2          # High thread priority for reduced scheduling latency
+PROFILE_CPU_STRICT=1    # Strict CPU placement for cache locality
+PROFILE_CACHE_REUSE=256 # KV cache reuse for multi-turn chat prefix sharing
+PROFILE_NO_WEBUI="true" # Headless: no web UI, reduce attack surface
+PROFILE_METRICS="true"  # Prometheus-compatible /metrics endpoint
 # --mlock: pin model in RAM; -b/-ub 4096: large batch for fast prompt encode
 # --swa-full: full SWA cache for hybrid attention models
 # --cache-ram 0: disable prompt cache (Qwen3.5 hybrid recurrent arch forces re-processing anyway)
