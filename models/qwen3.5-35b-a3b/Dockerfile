@@ -37,6 +37,7 @@ ENV FOUNDRY_EXTRA_ARGS=""
 # Copy profiles and entrypoint
 COPY profiles/ /opt/foundry/profiles/
 COPY entrypoint.sh /opt/foundry/entrypoint.sh
+COPY chat_template.jinja /opt/foundry/chat_template.jinja
 RUN chmod +x /opt/foundry/entrypoint.sh
 
 # Model storage

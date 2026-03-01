@@ -33,7 +33,7 @@ services:
       - FOUNDRY_PROFILE=${FOUNDRY_PROFILE:-auto}
       - FOUNDRY_PORT=8080
       - HF_TOKEN=${HF_TOKEN:-}
-      - FOUNDRY_EXTRA_ARGS=--chat-template chatml
+      - FOUNDRY_EXTRA_ARGS=--chat-template-file /opt/foundry/chat_template.jinja
     deploy:
       resources:
         reservations:
