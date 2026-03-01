@@ -26,6 +26,7 @@ services:
       - "${FOUNDRY_PORT:-8080}:8080"
     volumes:
       - ~/.cache/foundry:/models
+      - ./models/qwen3.5-35b-a3b/chat_template.jinja:/opt/foundry/chat_template.jinja:ro
     env_file:
       - path: .env
         required: false
